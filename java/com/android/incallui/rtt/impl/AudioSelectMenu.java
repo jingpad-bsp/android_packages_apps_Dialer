@@ -63,6 +63,7 @@ public class AudioSelectMenu extends PopupWindow {
     initItem(speakerButton, CallAudioState.ROUTE_SPEAKER, audioState);
     initItem(headsetButton, CallAudioState.ROUTE_WIRED_HEADSET, audioState);
     initItem(earpieceButton, CallAudioState.ROUTE_EARPIECE, audioState);
+    earpieceButton.setVisibility(View.GONE);
   }
 
   private void initItem(RttCheckableButton item, final int itemRoute, CallAudioState audioState) {
@@ -75,6 +76,8 @@ public class AudioSelectMenu extends PopupWindow {
         (v) -> {
           inCallButtonUiDelegate.setAudioRoute(itemRoute);
         });
+    if (itemRoute== CallAudioState.ROUTE_EARPIECE)
+       item.setVisibility(View.GONE);
   }
 
   void setAudioState(CallAudioState audioState) {

@@ -22,6 +22,7 @@ import android.support.annotation.StringRes;
 import android.telecom.CallAudioState;
 import java.lang.annotation.Retention;
 import java.lang.annotation.RetentionPolicy;
+import com.android.dialer.common.LogUtil;
 
 /** Info about how a "Speaker" button should be displayed */
 public class SpeakerButtonInfo {
@@ -43,8 +44,14 @@ public class SpeakerButtonInfo {
   public final boolean isChecked;
 
   public SpeakerButtonInfo(CallAudioState audioState) {
-    if ((audioState.getSupportedRouteMask() & CallAudioState.ROUTE_BLUETOOTH)
-        == CallAudioState.ROUTE_BLUETOOTH) {
+
+	int route_bt = audioState.getSupportedRouteMask() & CallAudioState.ROUTE_BLUETOOTH;
+	int route_hs = audioState.getSupportedRouteMask() & CallAudioState.ROUTE_WIRED_HEADSET;
+
+    LogUtil.i("SpeakerButtonInfo", "skyyy  start route_bt = " + route_bt + ", route_hs = " + route_hs);
+
+    if (((audioState.getSupportedRouteMask() & CallAudioState.ROUTE_BLUETOOTH) == CallAudioState.ROUTE_BLUETOOTH) ||
+ 		((audioState.getSupportedRouteMask() & CallAudioState.ROUTE_WIRED_HEADSET) == CallAudioState.ROUTE_WIRED_HEADSET)) {
       nonBluetoothMode = false;
       label = R.string.incall_label_audio;
 

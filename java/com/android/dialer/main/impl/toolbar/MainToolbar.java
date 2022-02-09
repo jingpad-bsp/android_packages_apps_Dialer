@@ -16,6 +16,7 @@
 
 package com.android.dialer.main.impl.toolbar;
 
+import android.animation.Animator;
 import android.content.Context;
 import android.support.annotation.NonNull;
 import android.support.annotation.StringRes;
@@ -29,6 +30,7 @@ import android.widget.ImageButton;
 import android.widget.PopupMenu;
 import com.android.dialer.common.Assert;
 import com.android.dialer.common.LogUtil;
+import com.android.dialer.util.OrientationUtil;
 import com.android.dialer.util.ViewUtil;
 import com.google.common.base.Optional;
 
@@ -40,14 +42,21 @@ public final class MainToolbar extends Toolbar implements PopupMenu.OnMenuItemCl
       new AccelerateDecelerateInterpolator();
 
   private SearchBarView searchBar;
+  /* UNISOC: modify for bug1279926 @{ */
+  private View voiceButton;
+  /* @} */
   private SearchBarListener listener;
   private MainToolbarMenu overflowMenu;
   private boolean hasGlobalLayoutListener;
+  /** UNISOC: Bug1110029 Dial pad, horizontal screen, enter any number,
+    * view the results of the search on the left, there is a 1cm blank below @{ */
+  private Context context;
 
   public MainToolbar(Context context, AttributeSet attrs) {
     super(context, attrs);
+    this.context = context;
   }
-
+  /** @} */
   @Override
   protected void onFinishInflate() {
     super.onFinishInflate();
@@ -59,7 +68,20 @@ public final class MainToolbar extends Toolbar implements PopupMenu.OnMenuItemCl
     optionsMenuButton.setOnTouchListener(overflowMenu.getDragToOpenListener());
 
     searchBar = findViewById(R.id.search_view_container);
+    /* UNISOC: modify for bug1279926 @{ */
+    voiceButton = searchBar.findViewById(R.id.voice_search_button);
+    /* @} */
   }
+
+  /* UNISOC: modify for bug1279926 @{ */
+  public void setVoiceButtonEnable(boolean enable){
+      if(enable){
+          voiceButton.setVisibility(View.VISIBLE);
+      } else {
+          voiceButton.setVisibility(View.GONE);
+      }
+  }
+  /* @} */
 
   @Override
   public boolean onMenuItemClick(MenuItem menuItem) {
@@ -93,6 +115,31 @@ public final class MainToolbar extends Toolbar implements PopupMenu.OnMenuItemCl
       LogUtil.e("MainToolbar.slideDown", "Already slide up.");
       return;
     }
+    /** UNISOC: Bug1110029 Dial pad, horizontal screen, enter any number,
+      * view the results of the search on the left, there is a 1cm blank below @{ */
+    if (OrientationUtil.isLandscape(context)) {
+      animate()
+          .translationY(-getHeight())
+          .setDuration(animate ? SLIDE_DURATION : 0)
+          .setInterpolator(SLIDE_INTERPOLATOR)
+          .setListener(new Animator.AnimatorListener() {
+             @Override
+             public void onAnimationStart(Animator animator) {}
+
+             @Override
+             public void onAnimationEnd(Animator animator) {
+                setVisibility(View.GONE);
+             }
+
+             @Override
+             public void onAnimationCancel(Animator animator) {}
+
+             @Override
+             public void onAnimationRepeat(Animator animator) {}
+        }).start();
+      return;
+    }
+    /** @} */
 
     animate()
         .translationY(-getHeight())
@@ -113,6 +160,32 @@ public final class MainToolbar extends Toolbar implements PopupMenu.OnMenuItemCl
       LogUtil.e("MainToolbar.slideDown", "Already slide down.");
       return;
     }
+    /** UNISOC: Bug1110029 Dial pad, horizontal screen, enter any number,
+      * view the results of the search on the left, there is a 1cm blank below @{ */
+    if (OrientationUtil.isLandscape(context)) {
+      animate()
+          .translationY(0)
+          .setDuration(animate ? SLIDE_DURATION : 0)
+          .setInterpolator(SLIDE_INTERPOLATOR)
+          .setListener(new Animator.AnimatorListener() {
+             @Override
+             public void onAnimationStart(Animator animator) {}
+
+             @Override
+             public void onAnimationEnd(Animator animator) {
+                  setVisibility(View.VISIBLE);
+              }
+
+             @Override
+             public void onAnimationCancel(Animator animator) {}
+
+             @Override
+             public void onAnimationRepeat(Animator animator) {}
+          }).start();
+      return;
+    }
+    /** @} */
+
     animate()
         .translationY(0)
         .setDuration(animate ? SLIDE_DURATION : 0)
@@ -175,4 +248,10 @@ public final class MainToolbar extends Toolbar implements PopupMenu.OnMenuItemCl
   public void maybeShowSimulator(AppCompatActivity appCompatActivity) {
     overflowMenu.maybeShowSimulator(appCompatActivity);
   }
+
+  /* UNISOC: Add for bug1072695. @{ */
+  public void showBlockedNumbers(boolean show) {
+    overflowMenu.showBlockedNumbers(show);
+  }
+  /* @} */
 }

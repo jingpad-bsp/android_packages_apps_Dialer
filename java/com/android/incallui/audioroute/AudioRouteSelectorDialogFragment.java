@@ -132,11 +132,11 @@ public class AudioRouteSelectorDialogFragment extends BottomSheetDialogFragment 
         CallAudioState.ROUTE_WIRED_HEADSET,
         audioState,
         DialerImpression.Type.IN_CALL_SWITCH_AUDIO_ROUTE_WIRED_HEADSET);
-    initItem(
+    /*initItem(
         (TextView) view.findViewById(R.id.audioroute_earpiece),
         CallAudioState.ROUTE_EARPIECE,
         audioState,
-        DialerImpression.Type.IN_CALL_SWITCH_AUDIO_ROUTE_EARPIECE);
+        DialerImpression.Type.IN_CALL_SWITCH_AUDIO_ROUTE_EARPIECE);*/
 
     // TODO(a bug): set peak height correctly to fully expand it in landscape mode.
     return view;

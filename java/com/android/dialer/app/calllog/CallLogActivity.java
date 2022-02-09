@@ -43,6 +43,7 @@ import com.android.dialer.performancereport.PerformanceReport;
 import com.android.dialer.postcall.PostCall;
 import com.android.dialer.util.TransactionSafeActivity;
 import com.android.dialer.util.ViewUtil;
+import com.android.dialer.common.LogUtil;
 
 /** Activity for viewing call history. */
 public class CallLogActivity extends TransactionSafeActivity
@@ -50,12 +51,26 @@ public class CallLogActivity extends TransactionSafeActivity
 
   @VisibleForTesting static final int TAB_INDEX_ALL = 0;
   @VisibleForTesting static final int TAB_INDEX_MISSED = 1;
-  private static final int TAB_INDEX_COUNT = 2;
+
+  /** UNISOC: Bug 1072686 androidq porting feature for filter call log by type feature @{ */
+  private static final int TAB_INDEX_OUTTING = 2;
+  private static final int TAB_INDEX_INCOMING = 3;
+  private static final int TAB_INDEX_COUNT = 4; // @orig: 2
+  /** @} */
+
+  private static final String KEY_IS_RTL = "key_is_rtl";
+
   private ViewPager viewPager;
   private ViewPagerTabs viewPagerTabs;
   private ViewPagerAdapter viewPagerAdapter;
   private CallLogFragment allCallsFragment;
   private CallLogFragment missedCallsFragment;
+
+  /** UNISOC: Bug 1072686 androidq porting feature for filter call log by type feature @{ */
+  private CallLogFragment mOutgoingCallsFragment;
+  private CallLogFragment mInComingCallsFragment;
+  /** @} */
+
   private String[] tabTitles;
   private boolean isResumed;
   private int selectedPageIndex;
@@ -86,18 +101,24 @@ public class CallLogActivity extends TransactionSafeActivity
     tabTitles = new String[TAB_INDEX_COUNT];
     tabTitles[0] = getString(R.string.call_log_all_title);
     tabTitles[1] = getString(R.string.call_log_missed_title);
+    /** UNISOC: Bug 1072686 androidq porting feature for filter call log by type feature @{ */
+    tabTitles[2] = getString(R.string.call_log_outgoing_title);
+    tabTitles[3] = getString(R.string.call_log_incoming_title);
+    /** @} */
 
     viewPager = (ViewPager) findViewById(R.id.call_log_pager);
 
     viewPagerAdapter = new ViewPagerAdapter(getFragmentManager());
     viewPager.setAdapter(viewPagerAdapter);
-    viewPager.setOffscreenPageLimit(1);
+    /** UNISOC: Bug 1072686 androidq porting feature for filter call log by type feature
+     * There are 4 pagers in viewpager,we have to preload another 3 pagers */
+    viewPager.setOffscreenPageLimit(3 /* UNISOC: @orig: 1*/);
     viewPager.setOnPageChangeListener(this);
 
     viewPagerTabs = (ViewPagerTabs) findViewById(R.id.viewpager_header);
 
     viewPagerTabs.setViewPager(viewPager);
-    viewPager.setCurrentItem(startingTab);
+    viewPager.setCurrentItem(getRtlPosition(startingTab));
   }
 
   @Override
@@ -131,40 +152,21 @@ public class CallLogActivity extends TransactionSafeActivity
   }
 
   @Override
-  public boolean onCreateOptionsMenu(Menu menu) {
-    final MenuInflater inflater = getMenuInflater();
-    inflater.inflate(R.menu.call_log_options, menu);
-    return true;
+  public void onSaveInstanceState(Bundle savedInstanceState) {
+    savedInstanceState.putBoolean(KEY_IS_RTL, ViewUtil.isRtl());
+    LogUtil.i("CallLogActivity.onSaveInstanceState", "ViewUtil.isRtl(): " + ViewUtil.isRtl());
+    super.onSaveInstanceState(savedInstanceState);
   }
 
   @Override
-  public boolean onPrepareOptionsMenu(Menu menu) {
-    final MenuItem itemDeleteAll = menu.findItem(R.id.delete_all);
-    if (allCallsFragment != null && itemDeleteAll != null) {
-      // If onPrepareOptionsMenu is called before fragments are loaded, don't do anything.
-      final CallLogAdapter adapter = allCallsFragment.getAdapter();
-      itemDeleteAll.setVisible(adapter != null && !adapter.isEmpty());
+  protected void onRestoreInstanceState(Bundle savedInstanceState) {
+    super.onRestoreInstanceState(savedInstanceState);
+    boolean isRtl = savedInstanceState.getBoolean(KEY_IS_RTL, ViewUtil.isRtl());
+    if (isRtl != ViewUtil.isRtl()) {
+      int item = viewPagerAdapter.getCount() - 1 - viewPager.getCurrentItem();
+      LogUtil.i("CallLogActivity.onRestoreInstanceState", "item: " + item);
+      viewPager.setCurrentItem(item);
     }
-    return true;
-  }
-
-  @Override
-  public boolean onOptionsItemSelected(MenuItem item) {
-    if (!isSafeToCommitTransactions()) {
-      return true;
-    }
-
-    if (item.getItemId() == android.R.id.home) {
-      PerformanceReport.recordClick(UiAction.Type.CLOSE_CALL_HISTORY_WITH_CANCEL_BUTTON);
-      final Intent intent = new Intent("com.android.dialer.main.impl.MAIN");
-      intent.addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP);
-      startActivity(intent);
-      return true;
-    } else if (item.getItemId() == R.id.delete_all) {
-      ClearCallLogDialog.show(getFragmentManager());
-      return true;
-    }
-    return super.onOptionsItemSelected(item);
   }
 
   @Override
@@ -213,6 +215,18 @@ public class CallLogActivity extends TransactionSafeActivity
           missedCallsFragment.markMissedCallsAsReadAndRemoveNotifications();
         }
         break;
+      /** UNISOC: Bug 1072686 androidq porting feature for filter call log by type feature @{ */
+      case TAB_INDEX_OUTTING:
+        if (mOutgoingCallsFragment != null) {
+          mOutgoingCallsFragment.markMissedCallsAsReadAndRemoveNotifications();
+        }
+        break;
+      case TAB_INDEX_INCOMING:
+        if (mInComingCallsFragment != null) {
+          mInComingCallsFragment.markMissedCallsAsReadAndRemoveNotifications();
+        }
+        break;
+      /** @} */
       default:
         throw Assert.createIllegalStateFailException("Invalid position: " + position);
     }
@@ -244,6 +258,12 @@ public class CallLogActivity extends TransactionSafeActivity
               CallLogQueryHandler.CALL_TYPE_ALL, true /* isCallLogActivity */);
         case TAB_INDEX_MISSED:
           return new CallLogFragment(Calls.MISSED_TYPE, true /* isCallLogActivity */);
+        /** UNISOC: Bug 1072686 androidq porting feature for filter call log by type feature @{ */
+        case TAB_INDEX_OUTTING:
+          return new CallLogFragment(Calls.OUTGOING_TYPE, true /* isCallLogActivity */);
+        case TAB_INDEX_INCOMING:
+          return new CallLogFragment(Calls.INCOMING_TYPE, true /* isCallLogActivity */);
+        /** @} */
         default:
           throw new IllegalStateException("No fragment at position " + position);
       }
@@ -259,6 +279,14 @@ public class CallLogActivity extends TransactionSafeActivity
         case TAB_INDEX_MISSED:
           missedCallsFragment = fragment;
           break;
+        /** UNISOC: Bug 1072686 androidq porting feature for filter call log by type feature @{ */
+        case TAB_INDEX_OUTTING:
+          mOutgoingCallsFragment = fragment;
+          break;
+        case TAB_INDEX_INCOMING:
+          mInComingCallsFragment = fragment;
+          break;
+        /** @} */
         default:
           throw Assert.createIllegalStateFailException("Invalid position: " + position);
       }

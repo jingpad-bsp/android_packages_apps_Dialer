@@ -244,6 +244,12 @@ public class ContactInfoCache implements OnImageLoadCompleteListener {
         Log.d(
             TAG,
             "  ==> valid name, but presentation not allowed!" + " displayName = " + displayName);
+          if(info.namePresentation == TelecomManager.PRESENTATION_ALLOWED){
+              displayName = info.name;
+              cce.nameAlternative = info.nameAlternative;
+              label = info.phoneLabel;
+              Log.i(TAG,"populateCacheEntry set displayName = " + displayName);
+          }
       } else {
         // Causes cce.namePrimary to be set as info.name below. CallCardPresenter will
         // later determine whether to use the name or nameAlternative when presenting
@@ -295,8 +301,8 @@ public class ContactInfoCache implements OnImageLoadCompleteListener {
     }
     return name;
   }
-
-  ContactCacheEntry getInfo(String callId) {
+//UNISOC:modify for bug940943
+  public ContactCacheEntry getInfo(String callId) {
     return infoMap.get(callId);
   }
 
@@ -357,6 +363,7 @@ public class ContactInfoCache implements OnImageLoadCompleteListener {
 
     // We need to force a new query if phone number has changed.
     boolean forceQuery = needForceQuery(call, cacheEntry);
+    boolean cnapUpdate = isCnapUpdate(call, cacheEntry);
     Trace.endSection();
     Log.d(TAG, "findInfo: callId = " + callId + "; forceQuery = " + forceQuery);
 
@@ -409,13 +416,16 @@ public class ContactInfoCache implements OnImageLoadCompleteListener {
             new FindInfoCallback(isIncoming, queryToken));
     Trace.endSection();
 
-    if (cacheEntry != null) {
+    if (cacheEntry != null && !cnapUpdate) {
       // We should not override the old cache item until the new query is
       // back. We should only update the queryId. Otherwise, we may see
       // flicker of the name and image (old cache -> new cache before query
       // -> new cache after query)
       cacheEntry.queryId = queryToken.queryId;
       Log.d(TAG, "There is an existing cache. Do not override until new query is back");
+      if(cacheEntry.isVoicemailNumber){//UNISOC:add for bug1180003
+        cacheEntry.isVoicemailNumber = false;
+      }
     } else {
       ContactCacheEntry initialCacheEntry =
           updateCallerInfoInCacheOnAnyThread(
@@ -506,6 +516,13 @@ public class ContactInfoCache implements OnImageLoadCompleteListener {
 
   private void maybeUpdateFromCequintCallerId(
       CallerInfo callerInfo, String cnapName, boolean isIncoming) {
+    Log.i(TAG, "maybeUpdateFromCequintCallerIds: cnapName=" + cnapName);
+    if(cnapName != null && callerInfo.name == null && isIncoming){
+      callerInfo.name = cnapName;
+      callerInfo.contactExists = true;
+      Log.i(TAG, "maybeUpdateFromCequintCallerIds: cnapName enable");
+      return;
+    }
     if (!CequintCallerIdManager.isCequintCallerIdEnabled(context)) {
       return;
     }
@@ -925,7 +942,8 @@ public class ContactInfoCache implements OnImageLoadCompleteListener {
   }
 
   private boolean needForceQuery(DialerCall call, ContactCacheEntry cacheEntry) {
-    if (call == null || call.isConferenceCall()) {
+    // UNISOC: for bug887066
+    if (call == null || (call.isConferenceCall() && call.getChildCallIds().size() > 1)) {
       return false;
     }
 
@@ -939,6 +957,13 @@ public class ContactInfoCache implements OnImageLoadCompleteListener {
 
     if (!TextUtils.equals(oldPhoneNumber, newPhoneNumber)) {
       Log.d(TAG, "phone number has changed: " + oldPhoneNumber + " -> " + newPhoneNumber);
+      if (!call.isVoiceMailNumber()) { //UNISOC:add for bug1149859
+        call.updateIsVoiceMailNumber();
+      }
+      return true;
+    }
+
+    if(isCnapUpdate(call, cacheEntry)){
       return true;
     }
 
@@ -968,5 +993,22 @@ public class ContactInfoCache implements OnImageLoadCompleteListener {
       Log.d(TAG, "waitingQueryId = " + waitingQueryId + "; queryId = " + queryId);
       return waitingQueryId == queryId;
     }
+  }
+
+  /*UNISOC:add for CNAP feature*/
+  private boolean isCnapUpdate(DialerCall call, ContactCacheEntry cacheEntry){
+    if(context == null){
+      Log.e(TAG, "isCnapUpdate context is null");
+      return false;
+    }
+    String unknow = context.getString(R.string.unknown);
+    if(cacheEntry != null && call != null && !TextUtils.isEmpty(cacheEntry.namePrimary) && (cacheEntry.namePrimary).equals(unknow) && !cacheEntry.isLocalContact()){
+      String cnapName = call.getCnapName();
+      if(!TextUtils.isEmpty(cnapName)) {
+        Log.i(TAG, "cnapname has changed to" + cnapName);
+        return true;
+      }
+    }
+    return false;
   }
 }

@@ -24,6 +24,7 @@ import android.util.AttributeSet;
 import android.view.ContextThemeWrapper;
 import android.view.KeyEvent;
 import android.view.LayoutInflater;
+import android.view.Surface;
 import android.view.View;
 import android.view.View.OnClickListener;
 import android.view.View.OnKeyListener;
@@ -39,6 +40,9 @@ import com.android.dialer.logging.DialerImpression;
 import com.android.dialer.logging.Logger;
 import com.android.incallui.DialpadPresenter.DialpadUi;
 import com.android.incallui.baseui.BaseFragment;
+import com.android.incallui.call.CallList;
+import com.android.incallui.call.DialerCall;
+import com.android.incallui.sprd.InCallUiUtils;
 import java.util.Map;
 
 /** Fragment for call control buttons */
@@ -158,6 +162,11 @@ public class DialpadFragment extends BaseFragment<DialpadPresenter, DialpadUi>
     backButton.setVisibility(View.VISIBLE);
     backButton.setOnClickListener(this);
     endCallSpace = dialpadView.findViewById(R.id.end_call_space);
+    /* UNISOC: modify for bug1152075 @{ */
+    if (isLandscape()){
+      endCallSpace.setVisibility(View.GONE);
+    }
+    /* @} */
 
     return parent;
   }
@@ -167,6 +176,14 @@ public class DialpadFragment extends BaseFragment<DialpadPresenter, DialpadUi>
     super.onResume();
     updateColors();
     endCallSpace.setVisibility(shouldShowEndCallSpace ? View.VISIBLE : View.GONE);
+    // UNISOC: add for bug1510544 video customer service
+    setAlphaForDialpadView(77);
+  }
+  // UNISOC: add for bug1510544 video customer service
+  @Override
+  public void onPause() {
+    super.onPause();
+    setAlphaForDialpadView(255);
   }
 
   public void updateColors() {
@@ -307,6 +324,28 @@ public class DialpadFragment extends BaseFragment<DialpadPresenter, DialpadUi>
 
     public void setYFraction(float yFraction) {
       setTranslationY(yFraction * getHeight());
+    }
+  }
+  /* UNISOC: modify for bug1152075 @{ */
+  private boolean isLandscape() {
+    // Choose orientation based on display orientation, not window orientation
+    int rotation = Surface.ROTATION_0;
+    if(getActivity() != null){
+      rotation = getActivity().getWindowManager().getDefaultDisplay().getRotation();
+    }
+    return rotation == Surface.ROTATION_90 || rotation == Surface.ROTATION_270;
+  }
+  /* @} */
+  // UNISOC: add for bug1510544 video customer service
+  public void setAlphaForDialpadView(int value) {
+    DialerCall call = CallList.getInstance().getFirstCall();
+    if (call == null) {
+      return;
+    }
+    if (InCallUiUtils.isSupportVideoCustomerServiceAndNumbers(getContext(), call)
+            && call.isVideoCall()){
+      dialpadView.getBackground().mutate().setAlpha(value);
+      LogUtil.i("DialpadFragment.setAlphaForDialpadView", "value = " + value);
     }
   }
 }

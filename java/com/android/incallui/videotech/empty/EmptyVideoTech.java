@@ -17,6 +17,7 @@
 package com.android.incallui.videotech.empty;
 
 import android.content.Context;
+import android.net.Uri;
 import android.support.annotation.NonNull;
 import android.support.annotation.Nullable;
 import android.telecom.PhoneAccountHandle;
@@ -114,4 +115,20 @@ public class EmptyVideoTech implements VideoTech {
   public com.android.dialer.logging.VideoTech.Type getVideoTechType() {
     return com.android.dialer.logging.VideoTech.Type.NONE;
   }
+  /* UNISOC: Add video call option menu@{ */
+  @Override
+  public void degradeToVoice() {}
+  /*@}*/
+
+  /* UNISOC: Add for change video type feature@{ */
+  @Override
+  public void changeToRxVideo() {}
+  /*@}*/
+  //UNISOC: Add for bug1137831
+  @Override
+  public void changeToTxVideo(){}
+
+  // UNISOC: add for bug1510544 video customer service
+  @Override
+  public void setPauseImage (Uri uri){}
 }

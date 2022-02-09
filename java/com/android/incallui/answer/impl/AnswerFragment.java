@@ -22,10 +22,15 @@ import android.animation.AnimatorListenerAdapter;
 import android.animation.AnimatorSet;
 import android.animation.ObjectAnimator;
 import android.annotation.SuppressLint;
+import android.annotation.TargetApi;
+import android.app.KeyguardManager;
+import android.app.KeyguardManager.KeyguardDismissCallback;
 import android.content.Context;
 import android.content.pm.PackageManager;
 import android.location.Location;
 import android.net.Uri;
+import android.os.Build.VERSION;
+import android.os.Build.VERSION_CODES;
 import android.os.Bundle;
 import android.os.Handler;
 import android.os.Looper;
@@ -92,6 +97,10 @@ import com.google.common.base.Optional;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
+import com.android.incallui.sprd.plugin.InComingThirdCall.InComingThirdCallHelper;
+import android.widget.TextView;
+import com.android.incallui.sprd.InCallUiUtils;
+import com.android.incallui.sprd.plugin.CallerAddress.CallerAddressHelper;
 
 /** The new version of the incoming call screen. */
 @SuppressLint("ClickableViewAccessibility")
@@ -165,7 +174,8 @@ public class AnswerFragment extends Fragment
   private ContactGridManager contactGridManager;
   private VideoCallScreen answerVideoCallScreen;
   private Handler handler = new Handler(Looper.getMainLooper());
-
+  // UNISOC Feature Porting: Display caller address for phone number feature.
+  private TextView mGeocodeView;
   private enum SecondaryBehavior {
     REJECT_WITH_SMS(
         R.drawable.quantum_ic_message_white_24,
@@ -437,6 +447,13 @@ public class AnswerFragment extends Fragment
     } else if (isVideoCall()) {
       secondaryButton.setVisibility(View.VISIBLE);
     }
+    // UNISOC: modify for bug1154485
+    /* UNISOC Feature Porting: InComing Third Call Feature. @{ */
+    if (InComingThirdCallHelper.getInstance(getActivity()).isSupportIncomingThirdCall()) {
+        answerAndReleaseButton.setVisibility(View.INVISIBLE); //UNISOC: modify for bug1120412
+        return;
+    }
+    /* @} */
 
     answerAndReleaseBehavior = SecondaryBehavior.ANSWER_AND_RELEASE;
     answerAndReleaseBehavior.applyToView(answerAndReleaseButton);
@@ -574,6 +591,8 @@ public class AnswerFragment extends Fragment
       // Hide the avatar to make room for location
       contactGridManager.setAvatarHidden(true);
     }
+    // UNISOC Feature Porting: Display caller address for phone number feature.
+    InCallUiUtils.setCallerAddress(getActivity(), primaryInfo, mGeocodeView);
   }
 
   private void updateDataFragment() {
@@ -747,6 +766,11 @@ public class AnswerFragment extends Fragment
 
     Fragment answerMethod =
         getChildFragmentManager().findFragmentById(R.id.answer_method_container);
+    /* UNISOC Feature Porting: InComing Third Call Feature. @{ */
+    if (getActivity() != null) {
+        InComingThirdCallHelper.getInstance(getActivity()).handleIncomingThirdCall(getActivity());
+      }
+      /* @} */
     if (AnswerMethodFactory.needsReplacement(answerMethod)) {
       getChildFragmentManager()
           .beginTransaction()
@@ -783,7 +807,13 @@ public class AnswerFragment extends Fragment
         view.findViewById(R.id.videocall_video_off).setVisibility(View.VISIBLE);
       }
     }
-
+    /* UNISOC Feature Porting: Display caller address for phone number feature. @{ */
+    mGeocodeView = (TextView) view.findViewById(R.id.geocode);
+    if (mGeocodeView != null) {
+      mGeocodeView.setVisibility(CallerAddressHelper.getsInstance(
+              getActivity()).isSupportCallerAddress() ? View.VISIBLE : View.GONE);
+    }
+    /* @} */
     Trace.endSection();
     return view;
   }
@@ -858,6 +888,11 @@ public class AnswerFragment extends Fragment
     if (answerVideoCallScreen != null) {
       answerVideoCallScreen = null;
     }
+    /* UNISOC Feature Porting: InComing Third Call Feature. @{ */
+    if (getActivity() != null) {
+        InComingThirdCallHelper.getInstance(getActivity()).dismissHangupCallDialog();
+    }
+    /* @} */
     super.onDestroyView();
     inCallScreenDelegate.onInCallScreenUnready();
     answerScreenDelegate.onAnswerScreenUnready();
@@ -923,7 +958,18 @@ public class AnswerFragment extends Fragment
 
   @Override
   public void answerFromMethod() {
-    acceptCallByUser(false /* answerVideoAsAudio */);
+    /* UNISOC Feature Porting: InComing Third Call Feature 1144691. @{ */
+    if (allowAnswerAndRelease() && hasCallOnHold()
+            && InComingThirdCallHelper.getInstance(getActivity()).isSupportIncomingThirdCall()) {
+      if (!buttonAcceptClicked) {
+        answerScreenDelegate.onAnswerAndReleaseCall();
+        buttonAcceptClicked = true;
+      }
+      return;
+    } else {
+    /* @} */
+      acceptCallByUser(false /* answerVideoAsAudio */);
+    }
   }
 
   @Override
@@ -1011,11 +1057,19 @@ public class AnswerFragment extends Fragment
     if (getAnswerMethod() != null) {
       if (allowAnswerAndRelease()) {
         if (hasCallOnHold()) {
-          getAnswerMethod()
-              .setHintText(getText(R.string.call_incoming_default_label_answer_and_release_third));
+          /* UNISOC Feature Porting: InComing Third Call Feature. 1144691 @{ */
+          if (InComingThirdCallHelper.getInstance(getContext()).isSupportIncomingThirdCall()) {
+            getAnswerMethod().setHintText(getText(R.string.call_incoming_default_label_answer_and_end_second));
+          } else {
+          /* @} */
+            getAnswerMethod()
+                    .setHintText(getText(R.string.call_incoming_default_label_answer_and_release_third));
+          }
         } else if (primaryCallState.supportsCallOnHold()) {
           getAnswerMethod()
               .setHintText(getText(R.string.call_incoming_default_label_answer_and_release_second));
+        }else{//add for bug1182237
+          getAnswerMethod().setHintText(null);
         }
       } else {
         getAnswerMethod().setHintText(null);
@@ -1023,7 +1077,7 @@ public class AnswerFragment extends Fragment
     }
   }
 
-  private void showMessageMenu() {
+  public void showMessageMenu() {
     LogUtil.i("AnswerFragment.showMessageMenu", "Show sms menu.");
     if (getContext() == null || isDetached() || getChildFragmentManager().isDestroyed()) {
       return;
@@ -1052,20 +1106,58 @@ public class AnswerFragment extends Fragment
   }
 
   @Override
+  @TargetApi(VERSION_CODES.O)
   public void smsSelected(@Nullable CharSequence text) {
     LogUtil.i("AnswerFragment.smsSelected", null);
     textResponsesFragment = null;
 
     if (text == null) {
-      createCustomSmsDialogFragment = CreateCustomSmsDialogFragment.newInstance();
-      createCustomSmsDialogFragment.show(getChildFragmentManager(), null);
-      return;
+      if (VERSION.SDK_INT < VERSION_CODES.O) {
+        LogUtil.i("AnswerFragment.smsSelected", "below O, showing dialog directly");
+        showCustomSmsDialog();
+        return;
+      }
+      if (!getContext().getSystemService(KeyguardManager.class).isKeyguardLocked()) {
+        LogUtil.i("AnswerFragment.smsSelected", "not locked, showing dialog directly");
+        showCustomSmsDialog();
+        return;
+      }
+
+      // Show the custom reply dialog only after device is unlocked, as it may cause impersonation
+      // see b/137134588
+      LogUtil.i("AnswerFragment.smsSelected", "dismissing keyguard");
+      getContext()
+          .getSystemService(KeyguardManager.class)
+          .requestDismissKeyguard(
+              getActivity(),
+              new KeyguardDismissCallback() {
+                @Override
+                public void onDismissCancelled() {
+                  LogUtil.i("AnswerFragment.smsSelected", "onDismissCancelled");
+                }
+
+                @Override
+                public void onDismissError() {
+                  LogUtil.i("AnswerFragment.smsSelected", "onDismissError");
+                }
+
+                @Override
+                public void onDismissSucceeded() {
+                  LogUtil.i("AnswerFragment.smsSelected", "onDismissSucceeded");
+                  showCustomSmsDialog();
+                }
+              });return;
     }
 
     if (primaryCallState != null && canRejectCallWithSms()) {
       rejectCall();
       answerScreenDelegate.onRejectCallWithMessage(text.toString());
     }
+  }
+
+  private void showCustomSmsDialog() {
+    createCustomSmsDialogFragment = CreateCustomSmsDialogFragment.newInstance();
+    createCustomSmsDialogFragment.showNow(getChildFragmentManager(), null);
   }
 
   @Override
@@ -1170,4 +1262,31 @@ public class AnswerFragment extends Fragment
       return false;
     }
   }
+
+  /* UNISOC Feature Porting: Add for call recorder feature. @{ */
+  @Override
+  public void setRecordTime(String recordTime) {
+    LogUtil.i("AnswerFragment.setRecordTime", "recordTime: " + recordTime);
+  }
+
+  @Override
+  public void setRecord(boolean value) {
+    LogUtil.i("AnswerFragment.setRecord", "value: " + value);
+  }
+  /* @} */
+
+    /*add for bug1166982(bug904816) @{ */
+    @Override
+    public void onVideoCallIsFront() {
+        if (answerVideoCallScreen != null) {
+            answerVideoCallScreen.onVideoCallIsFront();
+        }
+    }
+    @Override
+    public void onVideoCallIsBack() {
+        if (answerVideoCallScreen != null) {
+            answerVideoCallScreen.onVideoCallIsBack();
+        }
+    }
+    /* @} */
 }

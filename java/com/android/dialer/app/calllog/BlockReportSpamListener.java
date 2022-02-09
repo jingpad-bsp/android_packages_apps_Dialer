@@ -21,6 +21,7 @@ import android.support.annotation.NonNull;
 import android.support.v4.app.FragmentManager;
 import android.support.v7.widget.RecyclerView;
 import android.view.View;
+import android.util.Log;
 import com.android.dialer.blocking.FilteredNumberAsyncQueryHandler;
 import com.android.dialer.blockreportspam.BlockReportSpamDialogs;
 import com.android.dialer.blockreportspam.BlockReportSpamDialogs.DialogFragmentForReportingNotSpam;
@@ -111,6 +112,12 @@ public class BlockReportSpamListener implements CallLogListItemViewHolder.OnClic
       final String countryIso,
       final int callType,
       @NonNull final ContactSource.Type contactSourceType) {
+      /* UNISOC: add for bug1591971 @{ */
+      if ((adapter instanceof CallLogAdapter) && ((CallLogAdapter)adapter).isStateSaved()) {
+          Log.d("BlockReportSpamListener", "Can not perform this action after onSaveInstanceState");
+          return;
+      }
+      /* @} */
     BlockReportSpamDialogs.DialogFragmentForBlockingNumberAndReportingAsSpam.newInstance(
             displayNumber,
             spamSettings.isSpamEnabled(),
@@ -166,13 +173,19 @@ public class BlockReportSpamListener implements CallLogListItemViewHolder.OnClic
                     ReportingLocation.Type.CALL_LOG_HISTORY,
                     contactSourceType);
               }
-              filteredNumberAsyncQueryHandler.unblock(
-                  (rows, values) -> {
-                    Logger.get(context)
-                        .logImpression(DialerImpression.Type.USER_ACTION_UNBLOCKED_NUMBER);
-                    adapter.notifyDataSetChanged();
-                  },
-                  blockId);
+              /*unisoc:Add for bug for 1100489 @{*/
+              try {
+                  filteredNumberAsyncQueryHandler.unblock(
+                      (rows, values) -> {
+                        Logger.get(context).logImpression(DialerImpression.Type.USER_ACTION_UNBLOCKED_NUMBER);
+                        adapter.notifyDataSetChanged();
+                      },
+                      blockId);
+              }
+              catch(IllegalArgumentException e) {
+                  e.printStackTrace();
+              }
+              /*@}*/
             },
             null)
         .show(fragmentManager, BlockReportSpamDialogs.UNBLOCK_DIALOG_TAG);

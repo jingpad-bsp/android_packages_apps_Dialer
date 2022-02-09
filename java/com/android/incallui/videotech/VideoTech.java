@@ -17,6 +17,7 @@
 package com.android.incallui.videotech;
 
 import android.content.Context;
+import android.net.Uri;
 import android.support.annotation.NonNull;
 import android.support.annotation.Nullable;
 import android.telecom.PhoneAccountHandle;
@@ -79,7 +80,12 @@ public interface VideoTech {
   void setCamera(@Nullable String cameraId);
 
   void setDeviceOrientation(int rotation);
-
+  //UNISOC: Add for change video type feature
+  void changeToRxVideo();
+  //UNISOC: Add for bug1137831
+  void changeToTxVideo();
+  //UNISOC: add for bug1510544 video customer service
+  void setPauseImage (Uri uri);
   /**
    * Called on {@code VideoTechManager.savedTech} when it's first selected and it will always be
    * used.
@@ -87,6 +93,9 @@ public interface VideoTech {
   void becomePrimary();
 
   com.android.dialer.logging.VideoTech.Type getVideoTechType();
+
+  //UNISOC: Add video call option menu
+  void degradeToVoice();
 
   /** Listener for video call events. */
   interface VideoTechListener {
@@ -104,5 +113,7 @@ public interface VideoTech {
     void onUpgradedToVideo(boolean switchToSpeaker);
 
     void onImpressionLoggingNeeded(DialerImpression.Type impressionType);
+
+    void onVideoCallCallbackRegistered(boolean isRegistered);//UNISOC:add for bug1147201
   }
 }

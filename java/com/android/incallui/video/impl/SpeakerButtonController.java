@@ -65,6 +65,7 @@ public class SpeakerButtonController implements OnCheckedChangeListener, OnClick
     button.setOnCheckedChangeListener(checkable ? this : null);
     button.setImageResource(icon);
     button.setContentDescription(contentDescription);
+    button.setVisibility(View.GONE);
   }
 
   public void setAudioState(CallAudioState audioState) {

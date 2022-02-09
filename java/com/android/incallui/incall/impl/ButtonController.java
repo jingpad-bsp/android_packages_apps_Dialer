@@ -16,21 +16,28 @@
 
 package com.android.incallui.incall.impl;
 
+import android.content.Context;
 import android.graphics.drawable.AnimationDrawable;
 import android.support.annotation.CallSuper;
 import android.support.annotation.DrawableRes;
 import android.support.annotation.NonNull;
 import android.support.annotation.StringRes;
+import android.media.AudioDeviceInfo;
+import android.media.AudioManager;
 import android.telecom.CallAudioState;
 import android.text.TextUtils;
+import android.text.format.DateUtils;
 import android.view.View;
 import android.view.View.OnClickListener;
 import com.android.dialer.common.Assert;
+import com.android.incallui.InCallPresenter;
 import com.android.incallui.incall.impl.CheckableLabeledButton.OnCheckedChangeListener;
 import com.android.incallui.incall.protocol.InCallButtonIds;
 import com.android.incallui.incall.protocol.InCallButtonUiDelegate;
 import com.android.incallui.incall.protocol.InCallScreenDelegate;
 import com.android.incallui.speakerbuttonlogic.SpeakerButtonInfo;
+import com.android.incallui.sprd.plugin.ConferenceNumLimit.ConferenceNumLimitHelper;
+import com.android.dialer.common.LogUtil;
 
 /** Manages a single button. */
 interface ButtonController {
@@ -44,6 +51,9 @@ interface ButtonController {
   void setAllowed(boolean isAllowed);
 
   void setChecked(boolean isChecked);
+
+  // UNISOC Feature Porting: Add for call recorder feature.
+  void setLabelText(String description);
 
   @InCallButtonIds
   int getInCallButtonId();
@@ -114,6 +124,14 @@ interface ButtonController {
       this.isChecked = isChecked;
       if (button != null) {
         button.setChecked(isChecked);
+      }
+    }
+
+    // UNISOC Feature Porting: Add for call recorder feature.
+    @Override
+    public void setLabelText(String setLabel) {
+      if (button != null) {
+        button.setLabelText(setLabel);
       }
     }
 
@@ -230,6 +248,14 @@ interface ButtonController {
     @Override
     public void setChecked(boolean isChecked) {
       Assert.fail();
+    }
+
+    // UNISOC Feature Porting: Add for call recorder feature.
+    @Override
+    public void setLabelText(String label) {
+      if (button != null) {
+        button.setLabelText(label);
+      }
     }
 
     @Override
@@ -355,6 +381,14 @@ interface ButtonController {
       }
     }
 
+    // UNISOC Feature Porting: Add for call recorder feature.
+    @Override
+    public void setLabelText(String label) {
+      if (button != null) {
+        button.setLabelText(label);
+      }
+    }
+
     @Override
     public int getInCallButtonId() {
       return InCallButtonIds.BUTTON_AUDIO;
@@ -373,14 +407,54 @@ interface ButtonController {
         button.setIconDrawable(icon);
         button.setContentDescription(
             (nonBluetoothMode && !isChecked) ? isOffContentDescription : isOnContentDescription);
-        button.setShouldShowMoreIndicator(!nonBluetoothMode);
+
+		if (nonBluetoothMode)	
+			button.setEnabled(false);
+        else
+            button.setShouldShowMoreIndicator(!nonBluetoothMode);
       }
     }
 
+	private static int getApproximatedAudioRoute(Context context) {
+		AudioManager audioManager = context.getSystemService(AudioManager.class);
+		boolean hasBluetooth = false;
+		boolean hasHeadset = false;
+		for (AudioDeviceInfo info : audioManager.getDevices(AudioManager.GET_DEVICES_OUTPUTS)) {
+		  switch (info.getType()) {
+		    case AudioDeviceInfo.TYPE_BLUETOOTH_A2DP:
+		    case AudioDeviceInfo.TYPE_BLUETOOTH_SCO:
+		      hasBluetooth = true;
+		      continue;
+		    case AudioDeviceInfo.TYPE_WIRED_HEADSET:
+		      hasHeadset = true;
+		      continue;
+		    default:
+		      continue;
+		  }
+		}
+		if (hasBluetooth) {
+		  LogUtil.i("skyyy.getApproximatedAudioRoute", "Routing to bluetooth");
+		  return CallAudioState.ROUTE_BLUETOOTH;
+		}
+		if (hasHeadset) {
+		  LogUtil.i("skyyy.getApproximatedAudioRoute", "Routing to headset");
+		  return CallAudioState.ROUTE_WIRED_HEADSET;
+		}
+		LogUtil.i("skyyy.getApproximatedAudioRoute", "Routing to earpiece");
+
+		return CallAudioState.ROUTE_EARPIECE;
+	 }
+
+
     public void setAudioState(CallAudioState audioState) {
       SpeakerButtonInfo info = new SpeakerButtonInfo(audioState);
+      AudioManager audioManager = (AudioManager) delegate.getContext().getSystemService(Context.AUDIO_SERVICE);
+      boolean isPluggedIn = audioManager.isWiredHeadsetOn();
 
       nonBluetoothMode = info.nonBluetoothMode;
+      LogUtil.i("skyyy setAudioState", "nonBluetoothMode : " + nonBluetoothMode + ", isPluggedIn : " + isPluggedIn  );
+	  if (isPluggedIn) nonBluetoothMode = false;
+
       isChecked = info.isChecked;
       label = info.label;
       icon = info.icon;
@@ -400,7 +474,7 @@ interface ButtonController {
 
     @Override
     public void onClick(View v) {
-      delegate.showAudioRouteSelector();
+        delegate.showAudioRouteSelector();
     }
 
     @Override
@@ -497,7 +571,11 @@ interface ButtonController {
 
     @Override
     public void onClick(View view) {
-      delegate.mergeClicked();
+     /* UNISOC Feature Porting: Toast information when the number of conference call is over limit. @{*/
+     ConferenceNumLimitHelper.getInstance(button.getContext()).showToast(button.getContext());
+      if (ConferenceNumLimitHelper.getInstance(button.getContext()).isSupportClickMergeButton()) {
+         delegate.mergeClicked();
+      }
     }
   }
 
@@ -598,4 +676,121 @@ interface ButtonController {
       delegate.swapSimClicked();
     }
   }
+
+
+  /* UNISOC Feature Porting: Add for call recorder feature. @{ */
+  class RecrodButtonController extends SimpleCheckableButtonController {
+
+    public RecrodButtonController(@NonNull InCallButtonUiDelegate delegate) {
+      super(
+              delegate,
+              InCallButtonIds.BUTTON_RECORD,
+              0,
+              R.string.call_recording_setting_title,
+              R.string.call_recording_setting_title,
+              R.drawable.quantum_ic_record_white_36_ex);
+      Assert.isNotNull(delegate);
+    }
+
+    @Override
+    public void doCheckedChanged(boolean isChecked) {
+      delegate.recordClick(isChecked);
+    }
+
+    @Override
+    @CallSuper
+    public void setButton(CheckableLabeledButton button) {
+      super.setButton(button);
+      if (button != null) {
+        if (InCallPresenter.getInstance().isRecording()) {
+          button.setLabelText(DateUtils.formatElapsedTime(
+                  InCallPresenter.getInstance().getRecordTime() / 1000));
+        } else {
+          button.setLabelText(R.string.call_recording_setting_title);
+        }
+      }
+    }
+  }
+  /* @} */
+
+  /* UNISOC Feature Porting: Enable send sms in incallui feature. @{ */
+  class SendMessageButtonController extends SimpleNonCheckableButtonController {
+
+    public SendMessageButtonController(@NonNull InCallButtonUiDelegate delegate) {
+      super(
+              delegate,
+              InCallButtonIds.BUTTON_SEND_MESSAGE,
+              R.string.onscreenSMSText,
+              R.string.onscreenSMSText,
+              R.drawable.quantum_ic_send_message_white_36_ex);
+      Assert.isNotNull(delegate);
+    }
+
+    @Override
+    public void onClick(View view) {
+      delegate.sendSMSClicked();
+    }
+  }
+  /* @} */
+
+  /* UNISOC Feature Porting: Hangup all calls for orange case. @{ */
+  class HangupAllButtonController extends SimpleNonCheckableButtonController {
+
+    public HangupAllButtonController(@NonNull InCallButtonUiDelegate delegate) {
+      super(
+              delegate,
+              InCallButtonIds.BUTTON_HANGUP_ALL,
+              R.string.onScreenHangupAllText,
+              R.string.onScreenHangupAllText,
+              R.drawable.quantum_ic_hangup_all_white_36_ex);
+      Assert.isNotNull(delegate);
+    }
+
+    @Override
+    public void onClick(View view) {
+      delegate.hangupAllClicked();
+    }
+  }
+  /* @} */
+
+
+  /* UNISOC Feature Porting: Explicit Call Transfer. @{ */
+  class ECTButtonController extends SimpleNonCheckableButtonController {
+
+    public ECTButtonController(@NonNull InCallButtonUiDelegate delegate) {
+      super(
+              delegate,
+              InCallButtonIds.BUTTON_ECT,
+              R.string.onscreenTransferCallText,
+              R.string.onscreenTransferCallText,
+              R.drawable.quantum_ic_transfer_white_36_ex);
+      Assert.isNotNull(delegate);
+    }
+
+    @Override
+    public void onClick(View view) {
+      delegate.transferCall();
+    }
+  }
+  /* @} */
+
+  /* UNISOC Feature Porting: Add for call invite feature. @{ */
+  class InviteButtonController extends SimpleNonCheckableButtonController {
+
+    public InviteButtonController(@NonNull InCallButtonUiDelegate delegate) {
+      super(
+              delegate,
+              InCallButtonIds.BUTTON_INVITE,
+              R.string.invite_call,
+              R.string.invite_call,
+              R.drawable.quantum_ic_invite_white_36_ex);
+      Assert.isNotNull(delegate);
+    }
+
+    @Override
+    public void onClick(View view) {
+        delegate.inviteClicked();
+    }
+  }
+  /* @} */
 }

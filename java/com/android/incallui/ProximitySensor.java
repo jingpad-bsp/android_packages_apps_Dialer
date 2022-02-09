@@ -112,7 +112,8 @@ public class ProximitySensor
             || hasOngoingCall;
 
     DialerCall activeCall = callList.getActiveCall();
-    boolean isVideoCall = activeCall != null && activeCall.isVideoCall();
+    DialerCall outGoingCall = callList.getOutgoingCall();  //UNISOC: add for bug1176640
+    boolean isVideoCall = (activeCall != null && activeCall.isVideoCall()) || (outGoingCall != null && outGoingCall.isVideoCall());
     boolean isRttCall = activeCall != null && activeCall.isActiveRttCall();
 
     if (isOffhook != isPhoneOffhook
@@ -179,7 +180,7 @@ public class ProximitySensor
     if (proximityWakeLock != null) {
       if (!proximityWakeLock.isHeld()) {
         LogUtil.i("ProximitySensor.turnOnProximitySensor", "acquiring wake lock");
-        proximityWakeLock.acquire();
+        //proximityWakeLock.acquire();
       } else {
         LogUtil.i("ProximitySensor.turnOnProximitySensor", "wake lock already acquired");
       }
@@ -236,6 +237,13 @@ public class ProximitySensor
     // At that moment we're pretty sure users want to use it, instead of letting the
     // proximity sensor turn off the screen by their hands.
     screenOnImmediately |= dialpadVisible && horizontal;
+
+    /* UNISOC: add for bug1139124 Set screenOnImmediately to true when there is no live call. @{ */
+    if (!CallList.getInstance().hasLiveCall()) {
+      Log.i(this, "have no live call set screenOnImmediately to true.");
+      screenOnImmediately = true;
+    }
+    /* @} */
 
     LogUtil.i(
         "ProximitySensor.updateProximitySensorMode",

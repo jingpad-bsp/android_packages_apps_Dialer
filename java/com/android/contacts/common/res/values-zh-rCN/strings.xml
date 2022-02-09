@@ -7,7 +7,7 @@
   <string name="call_fax_work">拨打公司传真号码</string>
   <string name="call_fax_home">拨打住宅传真号码</string>
   <string name="call_pager">拨打寻呼机号码</string>
-  <string name="call_other">拨打电话</string>
+  <string name="call_other">拨打其他电话</string>
   <string name="call_callback">拨打回拨号码</string>
   <string name="call_car">拨打车载电话号码</string>
   <string name="call_company_main">拨打公司总机号码</string>

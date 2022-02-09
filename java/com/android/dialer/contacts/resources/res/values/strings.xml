@@ -33,7 +33,7 @@
   <!-- Action string for calling a pager phone number -->
   <string name="call_pager">Call pager</string>
   <!-- Action string for calling an other phone number -->
-  <string name="call_other">Call</string>
+  <string name="call_other">Call other</string>
   <!-- Action string for calling a callback number -->
   <string name="call_callback">Call callback</string>
   <!-- Action string for calling a car phone number -->

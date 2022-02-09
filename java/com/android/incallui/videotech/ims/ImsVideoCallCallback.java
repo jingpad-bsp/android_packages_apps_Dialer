@@ -64,13 +64,20 @@ public class ImsVideoCallCallback extends VideoCall.Callback {
 
     boolean wasVideoCall = VideoProfile.isVideo(previousVideoState);
     boolean isVideoCall = VideoProfile.isVideo(newVideoState);
+    // UNISOC: add for bug1510544 video customer service
+    boolean isBidirectionalVideoCall = VideoProfile.isBidirectional(newVideoState);
+    boolean wasOnlyRxVideoCall = VideoProfile.isReceptionEnabled(previousVideoState)
+            && !VideoProfile.isTransmissionEnabled(previousVideoState);
+    boolean wasOnlyTxVideoCall = !VideoProfile.isReceptionEnabled(previousVideoState)
+            && VideoProfile.isTransmissionEnabled(previousVideoState);
 
     if (wasVideoCall && !isVideoCall) {
       LogUtil.i(
           "ImsVideoTech.onSessionModifyRequestReceived", "call downgraded to %d", newVideoState);
     } else if (previousVideoState != newVideoState) {
       requestedVideoState = newVideoState;
-      if (!wasVideoCall) {
+      // UNISOC: add for bug1510544 video customer service
+      if (!wasVideoCall || ((wasOnlyRxVideoCall || wasOnlyTxVideoCall) && isBidirectionalVideoCall)) {
         videoTech.setSessionModificationState(
             SessionModificationState.RECEIVED_UPGRADE_TO_VIDEO_REQUEST);
         listener.onVideoUpgradeRequestReceived();

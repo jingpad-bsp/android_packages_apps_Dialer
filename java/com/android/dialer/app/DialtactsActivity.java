@@ -724,8 +724,12 @@ public class DialtactsActivity extends TransactionSafeActivity
       Logger.get(this).logScreenView(ScreenEvent.Type.CLEAR_FREQUENTS, this);
       return true;
     } else if (resId == R.id.menu_call_settings) {
-      handleMenuSettings();
-      Logger.get(this).logScreenView(ScreenEvent.Type.SETTINGS, this);
+      if (!PermissionsUtil.hasReadPhoneStatePermissions(this)) {
+      	Toast.makeText(getApplicationContext(), R.string.permission_no_call_settings, Toast.LENGTH_SHORT).show();
+      } else {
+      	handleMenuSettings();
+      	Logger.get(this).logScreenView(ScreenEvent.Type.SETTINGS, this);
+      }		
       return true;
     }
     return false;
@@ -1522,15 +1526,29 @@ public class DialtactsActivity extends TransactionSafeActivity
   @Override
   public void onRequestPermissionsResult(
       int requestCode, String[] permissions, int[] grantResults) {
-    // This should never happen; it should be impossible to start an interaction without the
-    // contacts permission from the Dialtacts activity.
-    Assert.fail(
-        String.format(
+
+    /**
+     * UNISOC: modify for bug991168 @{
+     * This should never happen; it should be impossible to start an interaction without the
+     * contacts permission from the Dialtacts activity.
+     * Assert.fail(
+     *  String.format(
+     *      Locale.US,
+     *      "Permissions requested unexpectedly: %d/%s/%s",
+     *      requestCode,
+     *      Arrays.toString(permissions),
+     *      Arrays.toString(grantResults)));
+     */
+    String errorString = String.format(
             Locale.US,
             "Permissions requested unexpectedly: %d/%s/%s",
             requestCode,
             Arrays.toString(permissions),
-            Arrays.toString(grantResults)));
+            Arrays.toString(grantResults));
+    LogUtil.d("DialtactsActivity.onRequestPermissionsResult", "errorString: %s", errorString);
+    Toast.makeText(getApplicationContext(), errorString,
+            Toast.LENGTH_SHORT).show();
+    /** @} */
   }
 
   @Override

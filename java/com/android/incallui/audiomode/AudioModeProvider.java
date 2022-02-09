@@ -27,15 +27,14 @@ import java.util.List;
 /** Proxy class for getting and setting the audio mode. */
 public class AudioModeProvider {
   private static final int SUPPORTED_AUDIO_ROUTE_ALL =
-      CallAudioState.ROUTE_EARPIECE
-          | CallAudioState.ROUTE_BLUETOOTH
+          CallAudioState.ROUTE_BLUETOOTH
           | CallAudioState.ROUTE_WIRED_HEADSET
           | CallAudioState.ROUTE_SPEAKER;
 
   private static final AudioModeProvider instance = new AudioModeProvider();
   private final List<AudioModeListener> listeners = new ArrayList<>();
   private CallAudioState audioState =
-      new CallAudioState(false, CallAudioState.ROUTE_EARPIECE, SUPPORTED_AUDIO_ROUTE_ALL);
+      new CallAudioState(false, CallAudioState.ROUTE_SPEAKER, SUPPORTED_AUDIO_ROUTE_ALL);
 
   public static AudioModeProvider getInstance() {
     return instance;
@@ -103,7 +102,7 @@ public class AudioModeProvider {
       return CallAudioState.ROUTE_WIRED_HEADSET;
     }
     LogUtil.i("AudioModeProvider.getApproximatedAudioRoute", "Routing to earpiece");
-    return CallAudioState.ROUTE_EARPIECE;
+    return CallAudioState.ROUTE_SPEAKER;
   }
 
   /** Notified on changes to audio mode. */

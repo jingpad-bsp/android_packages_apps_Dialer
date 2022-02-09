@@ -111,11 +111,13 @@ public final class SearchAdapter extends RecyclerView.Adapter<ViewHolder> {
           searchCursorManager.getCursor(position).getString(SearchCursor.HEADER_TEXT_POSITION);
       ((HeaderViewHolder) holder).setHeader(header);
     } else if (holder instanceof SearchActionViewHolder) {
+      /**UISOC: modify for the bug 1104601 @{*/
       ((SearchActionViewHolder) holder)
           .setAction(
               searchCursorManager.getSearchAction(position),
               position,
               TextUtils.isEmpty(rawNumber) ? query : rawNumber);
+      /*@}*/
     } else if (holder instanceof LocationPermissionViewHolder) {
       // No-op
     } else {
@@ -167,11 +169,12 @@ public final class SearchAdapter extends RecyclerView.Adapter<ViewHolder> {
    */
   public void showLocationPermissionRequest(
       OnClickListener allowClickListener, OnClickListener dismissClickListener) {
+/*
     this.allowClickListener = Assert.isNotNull(allowClickListener);
     this.dismissClickListener = Assert.isNotNull(dismissClickListener);
     if (searchCursorManager.showLocationPermissionRequest(true)) {
       notifyItemInserted(0);
-    }
+    }*/
   }
 
   /**

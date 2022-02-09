@@ -40,6 +40,9 @@ import com.android.incallui.ContactInfoCache.ContactCacheEntry;
 import com.android.incallui.call.CallList;
 import com.android.incallui.call.DialerCall;
 import com.android.incallui.call.state.DialerCallState;
+import com.android.incallui.sprd.InCallUiUtils;
+import com.android.incallui.sprd.plugin.conferenceState.ConferenceStateHelper;
+import com.android.incallui.sprd.plugin.displayfdn.DisplayFdnHelper;
 import java.lang.ref.WeakReference;
 import java.util.ArrayList;
 import java.util.Collections;
@@ -88,7 +91,9 @@ public class ConferenceParticipantListAdapter extends BaseAdapter {
   private List<ParticipantInfo> conferenceParticipants = new ArrayList<>();
   /** {@code True} if the conference parent supports separating calls from the conference. */
   private boolean parentCanSeparate;
-
+  /*UNISOC: add for bug1325262 @{*/
+  private boolean mContactCacheEmptybyCallId = false;
+  /*@}*/
   /**
    * Creates an instance of the ConferenceParticipantListAdapter.
    *
@@ -179,10 +184,15 @@ public class ConferenceParticipantListAdapter extends BaseAdapter {
     for (int position = 0; position <= last - first; position++) {
       View view = listView.getChildAt(position);
       String rowCallId = (String) view.getTag();
-      if (rowCallId.equals(callId)) {
-        getView(position + first, view, listView);
-        break;
-      }
+      //UNISOC:add for bug1148823
+       if(position <= getCount()) {
+           if (rowCallId.equals(callId)) {
+               getView(position + first, view, listView);
+               break;
+             }
+         } else{
+         LogUtil.e("ConferenceParticipantListAdapter.refreshView", "the position is out of number of participants" );
+       }
     }
   }
 
@@ -203,47 +213,58 @@ public class ConferenceParticipantListAdapter extends BaseAdapter {
             ? LayoutInflater.from(parent.getContext())
                 .inflate(R.layout.caller_in_conference, parent, false)
             : convertView;
+    if(position <= getCount()) {//UNISOC:add for bug1148823
+      ParticipantInfo participantInfo = conferenceParticipants.get(position);
+      DialerCall call = participantInfo.getCall();
+      ContactCacheEntry contactCache = participantInfo.getContactCacheEntry();
 
-    ParticipantInfo participantInfo = conferenceParticipants.get(position);
-    DialerCall call = participantInfo.getCall();
-    ContactCacheEntry contactCache = participantInfo.getContactCacheEntry();
+      final ContactInfoCache cache = ContactInfoCache.getInstance(getContext());
 
-    final ContactInfoCache cache = ContactInfoCache.getInstance(getContext());
+      // If a cache lookup has not yet been performed to retrieve the contact information and
+      // photo, do it now.
+      if (!participantInfo.isCacheLookupComplete()) {
+        cache.findInfo(
+                participantInfo.getCall(),
+                participantInfo.getCall().getState() == DialerCallState.INCOMING,
+                new ContactLookupCallback(this));
+      }
 
-    // If a cache lookup has not yet been performed to retrieve the contact information and
-    // photo, do it now.
-    if (!participantInfo.isCacheLookupComplete()) {
-      cache.findInfo(
-          participantInfo.getCall(),
-          participantInfo.getCall().getState() == DialerCallState.INCOMING,
-          new ContactLookupCallback(this));
+      boolean thisRowCanSeparate =
+              parentCanSeparate
+                      && call.can(android.telecom.Call.Details.CAPABILITY_SEPARATE_FROM_CONFERENCE);
+      boolean thisRowCanDisconnect =
+              call.can(android.telecom.Call.Details.CAPABILITY_DISCONNECT_FROM_CONFERENCE);
+
+      String name =
+              ContactsComponent.get(getContext())
+                      .contactDisplayPreferences()
+                      .getDisplayName(contactCache.namePrimary, contactCache.nameAlternative);
+
+      // UNISOC: Modify for Feature : FL1000060352 display state of conference member
+      // Tag the row in the conference participant list with the call id to make it easier to
+      // find calls when contact cache information is loaded.
+      result.setTag(call.getId());
+
+      /* UNISOC: add for bug1152417 @{ */
+      int subId = InCallUiUtils.getSubIdForPhoneAccountHandle(getContext(), call.getAccountHandle());
+      String fdnName = "";
+      boolean isSupportFdnListName = DisplayFdnHelper.getInstance(getContext()).isSupportFdnListName(subId);
+      if (isSupportFdnListName) {
+         fdnName = DisplayFdnHelper.getInstance(getContext()).getFDNListName(contactCache.number, subId);
+      }
+      setCallerInfoForRow(
+              result,
+              contactCache.namePrimary,
+              TextUtils.isEmpty(fdnName) ? call.updateNameIfRestricted(name) : fdnName,
+              contactCache.number,
+              contactCache.lookupKey,
+              contactCache.displayPhotoUri,
+              thisRowCanSeparate,
+              thisRowCanDisconnect,
+              call.getNonConferenceState());
+      return result;
+      /* @} */
     }
-
-    boolean thisRowCanSeparate =
-        parentCanSeparate
-            && call.can(android.telecom.Call.Details.CAPABILITY_SEPARATE_FROM_CONFERENCE);
-    boolean thisRowCanDisconnect =
-        call.can(android.telecom.Call.Details.CAPABILITY_DISCONNECT_FROM_CONFERENCE);
-
-    String name =
-        ContactsComponent.get(getContext())
-            .contactDisplayPreferences()
-            .getDisplayName(contactCache.namePrimary, contactCache.nameAlternative);
-
-    setCallerInfoForRow(
-        result,
-        contactCache.namePrimary,
-        call.updateNameIfRestricted(name),
-        contactCache.number,
-        contactCache.lookupKey,
-        contactCache.displayPhotoUri,
-        thisRowCanSeparate,
-        thisRowCanDisconnect,
-        call.getNonConferenceState());
-
-    // Tag the row in the conference participant list with the call id to make it easier to
-    // find calls when contact cache information is loaded.
-    result.setTag(call.getId());
 
     return result;
   }
@@ -259,6 +280,15 @@ public class ConferenceParticipantListAdapter extends BaseAdapter {
       ParticipantInfo participantInfo = participantsByCallId.get(callId);
       participantInfo.setContactCacheEntry(entry);
       participantInfo.setCacheLookupComplete(true);
+      /* UNISOC: add for bug1325262 @{ */
+      if(mContactCacheEmptybyCallId) {
+        mContactCacheEmptybyCallId = false;
+        sortParticipantList();
+        if (!mContactCacheEmptybyCallId) {
+          notifyDataSetChanged();
+        }
+      }
+      /*  @} */
       refreshView(callId);
     }
   }
@@ -286,13 +316,20 @@ public class ConferenceParticipantListAdapter extends BaseAdapter {
       int callState) {
 
     final ImageView photoView = (ImageView) view.findViewById(R.id.callerPhoto);
-    final TextView statusTextView = (TextView) view.findViewById(R.id.conferenceCallerStatus);
     final TextView nameTextView = (TextView) view.findViewById(R.id.conferenceCallerName);
     final TextView numberTextView = (TextView) view.findViewById(R.id.conferenceCallerNumber);
+    final TextView statusTextView = (TextView) view.findViewById(R.id.conferenceCallerStatus);
     final View endButton = view.findViewById(R.id.conferenceCallerDisconnect);
     final View separateButton = view.findViewById(R.id.conferenceCallerSeparate);
 
-    if (callState == DialerCallState.ONHOLD) {
+    /* UNISOC: Modify for Feature : FL1000060352 display state of conference member@{ */
+    if (ConferenceStateHelper.getInstance(view.getContext()).shouldShowParticipantState()) {
+      DialerCall call = CallList.getInstance().getCallById((String) view.getTag());
+      statusTextView.setVisibility(View.VISIBLE);
+      if (call != null) {
+      statusTextView.setText(getCallStateLabelFromState(view.getContext(), call.getNonConferenceState()));//UNISOC:modify for bug1181975
+      }
+    } else if (callState == DialerCallState.ONHOLD) {
       setViewsOnHold(photoView, statusTextView, nameTextView, numberTextView);
     } else {
       setViewsNotOnHold(photoView, statusTextView, nameTextView, numberTextView);
@@ -371,6 +408,35 @@ public class ConferenceParticipantListAdapter extends BaseAdapter {
     getContext().getResources().getValue(R.dimen.alpha_enabled, alpha, true);
     photoView.setAlpha(alpha.getFloat());
   }
+    /**
+   * UNISOC: Add for Feature : FL1000060352 display state of conference member
+   */
+  private String getCallStateLabelFromState(Context context, int state) {
+      String callStateLabel = " ";  // Label to display as part of the call banner
+
+      switch(state){
+          case DialerCallState.IDLE:
+              break;
+          case DialerCallState.ACTIVE:
+          case DialerCallState.CONFERENCED:
+              callStateLabel = context.getString(R.string.incall_active);
+              break;
+          case DialerCallState.ONHOLD:
+              callStateLabel = context.getString(R.string.incall_onhold);
+              break;
+          case DialerCallState.DIALING:
+          case DialerCallState.REDIALING:
+              callStateLabel = context.getString(R.string.incall_connecting);
+              break;
+          case DialerCallState.DISCONNECTING:
+              callStateLabel = context.getString(R.string.incall_hanging_up);
+              break;
+          default:
+              LogUtil.v("ConferenceParticipantListAdapter.getCallStateLabelFromState", "unexpected call: " + state);
+      }
+
+      return callStateLabel;
+  }
 
   /**
    * Updates the participant info list which is bound to the ListView. Stores the call and contact
@@ -444,7 +510,11 @@ public class ConferenceParticipantListAdapter extends BaseAdapter {
                     .contactDisplayPreferences()
                     .getSortName(c2.namePrimary, c2.nameAlternative);
             p2Name = p2Name != null ? p2Name : "";
-
+            /* UNISOC: add for bug1325262 @{ */
+            if(p1Name == "" || p2Name == ""){
+                mContactCacheEmptybyCallId = true;
+            }
+            /*  @} */
             return p1Name.compareToIgnoreCase(p2Name);
           }
         });
